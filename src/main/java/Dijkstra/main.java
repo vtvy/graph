@@ -18,47 +18,26 @@
  */
 package Dijkstra;
 
-import java.awt.Point;
-import java.io.BufferedReader;
-import java.io.BufferedWriter;
-import java.io.File;
-import java.io.FileInputStream;
-import java.io.FileReader;
-import java.io.FileWriter;
-import java.io.IOException;
-import java.io.PrintWriter;
-import java.util.ArrayList;
-import java.util.Enumeration;
-import java.util.Timer;
-
-import automorphism.Automorphism;
-
-import CSP.ConstraintGraph;
-import CSP.DFSSearch;
-
-import pruning.SPpruner;
-
 import search.Searcher;
-import statistics.DistinctLabelStat;
-import statistics.TimedOutSearchStats;
-
-import utilities.CommandLineParser;
-import utilities.DfscodesCache;
-import utilities.MyPair;
 import utilities.Settings;
-import utilities.StopWatch;
-
-import dataStructures.DFSCode;
 import dataStructures.DFScodeSerializer;
-import dataStructures.Graph;
-import dataStructures.HPListGraph;
-import dataStructures.Query;
-import dataStructures.StaticData;
-import decomposer.Decomposer;
 import java.lang.management.ManagementFactory;
 import java.lang.management.MemoryPoolMXBean;
 import java.lang.management.MemoryType;
 import java.util.List;
+import com.mongodb.client.MongoClients;
+import com.mongodb.client.MongoClient;
+import com.mongodb.client.MongoCollection;
+import com.mongodb.client.MongoDatabase;
+import static com.mongodb.client.model.Filters.gte;
+import static com.mongodb.client.model.Sorts.descending;
+import java.io.BufferedWriter;
+import java.io.File;
+import java.io.FileWriter;
+import java.io.IOException;
+import java.util.ArrayList;
+import java.util.Collection;
+import org.bson.Document;
 
 public class main {
 
@@ -73,10 +52,16 @@ public class main {
         // default frequency
         int freq = 1;
         int minK = 10;
-        int maxK = 10;
-//        String[] filenames = {"fb.lg", "citeseer.lg", "mico.lg", "p2p.lg","mydata9v9e1.lg"};
-        String[] filenames = {"S_CC.lg"};
+        int maxK = 50;
 
+
+        //Creating a MongoDB client
+        MongoClient client = MongoClients.create("mongodb+srv://test:test@graph.eywuuaq.mongodb.net/test");
+        //Connecting to the database
+        MongoDatabase db = client.getDatabase("grami");
+        MongoCollection subgraph = db.getCollection("subgraph");
+//        String[] filenames = {"fb.lg", "citeseer.lg", "mico.lg", "p2p.lg","mydata9v9e1.lg"};
+        String[] filenames = {"mydata9v9e1.lg"};
         for (String filename : filenames) {
             for (int k = minK; k <= maxK; k = k + 10) {
 
@@ -97,17 +82,17 @@ public class main {
                     }
                     long t0 = System.nanoTime();
                     // start mining
-                    sr.initialize();
+                    sr.initialize(subgraph);
                     System.out.println("In ra tap canh pho bien:");
-                    sr.kSubgraphs.forEach(action -> {
-                        System.out.println("- Canh co support: " + action.dfsCode.me.getFreq());
-                        String out = DFScodeSerializer.serialize(action.dfsCode.me);
-                        System.out.println(out + "\n");
-                    });
-                    System.out.println("************************************************");
-                    System.out.println("************************************************");
-                    System.out.println("************************************************");
-                    System.out.println("**********   Final minsub: " + sr.getMinsub() + "\n");
+//                    sr.kSubgraphs.forEach(action -> {
+//                        System.out.println("- Canh co support: " + action.dfsCode.me.getFreq());
+//                        String out = DFScodeSerializer.serialize(action.dfsCode.me);
+//                        System.out.println(out + "\n");
+//                    });
+//                    System.out.println("************************************************");
+//                    System.out.println("************************************************");
+//                    System.out.println("************************************************");
+//                    System.out.println("**********   Final minsub: " + sr.getMinsub() + "\n");
 
                     sr.search();
                     long timeUsage = System.nanoTime() - t0;
@@ -118,6 +103,10 @@ public class main {
                     // 3- the list of frequent subgraphs
                     FileWriter fw;
                     try {
+                        List<Document> results = (List<Document>) subgraph.find(gte("support", sr.getMinsub()))
+                                .sort(descending("support"))
+                                .into(new ArrayList<>());
+
                         String fName = "OutputK_" + k + "_" + Settings.fileName + ".txt";
 
                         fw = new FileWriter(fName);
@@ -125,19 +114,17 @@ public class main {
                         fw.write("Memory usage: " + actualMemUsed + "MB" + "\n");
                         fw.write("Final minsub: " + sr.getMinsub() + "\n");
                         fw.write("k: " + k + "\n");
-                        fw.write("Number of subgraphs: " + sr.result.size() + "\n\n");
+                        fw.write("Number of subgraphs: " + results.size() + "\n\n");
 
                         // write the frequent subgraphs
-                        for (int i = 0; i < sr.result.size(); i++) {
-                            String out = DFScodeSerializer.serialize(sr.result.get(i));
-
+                        for (int i = 0; i < results.size(); i++) {
+                            String out = (String) results.get(i).get("serialize");
                             fw.write("Subgraph " + i + ": ");
-                            fw.write("support " + sr.result.get(i).getFreq() + "\n");
+                            fw.write("support " + results.get(i).get("support") + "\n");
                             fw.write(out);
                             fw.write("\n");
                         }
                         fw.close();
-
                         //write to a sum
                         File totalFile = new File("Total_Output_" + filename + ".txt");
                         if (!totalFile.exists()) {
@@ -152,15 +139,15 @@ public class main {
                         bw.write(actualMemUsed + ":");
                         bw.write(sr.getMinsub() + ":");
                         bw.write(k + ":");
-                        bw.write(sr.result.size() + "\n");
+                        bw.write(results.size() + "\n");
                         bw.close();
                     } catch (IOException e) {
                         e.printStackTrace();
                     }
-
                 } catch (Exception e) {
-                    e.printStackTrace();
+                    System.out.println(e);
                 }
+                db.getCollection("subgraph").drop();
 
             }
 

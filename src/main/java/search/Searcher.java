@@ -18,9 +18,6 @@
  */
 package search;
 
-import java.io.File;
-import java.io.FileWriter;
-import java.io.IOException;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.HashSet;
@@ -28,19 +25,20 @@ import java.util.Hashtable;
 import java.util.Iterator;
 import java.util.Map;
 import java.util.PriorityQueue;
-import java.util.PriorityQueue;
 import java.util.TreeMap;
 import java.util.Vector;
 
-import statistics.Statistics;
 import utilities.MyPair;
-import utilities.Settings;
-import utilities.StopWatch;
-import Dijkstra.*;
+import com.mongodb.client.MongoCollection;
+import com.mongodb.client.MongoDatabase;
+import com.mongodb.client.result.InsertOneResult;
+import static com.mongodb.client.model.Filters.*;
+import static com.mongodb.client.model.Sorts.descending;
+import com.mongodb.client.model.Updates;
+
 import dataStructures.Canonizable;
 import dataStructures.DFSCode;
 import dataStructures.DFScodeSerializer;
-import dataStructures.Edge;
 import dataStructures.Frequency;
 import dataStructures.FrequentSubgraph;
 import dataStructures.Frequented;
@@ -48,12 +46,13 @@ import dataStructures.GSpanEdge;
 import dataStructures.Graph;
 import dataStructures.HPListGraph;
 import dataStructures.IntFrequency;
-import dataStructures.StaticData;
 import dataStructures.gEdgeComparator;
 import dataStructures.myNode;
 import java.util.Arrays;
 import java.util.Collection;
-import java.util.concurrent.atomic.AtomicInteger;
+import org.bson.Document;
+import org.bson.conversions.Bson;
+import org.bson.types.ObjectId;
 
 public class Searcher<NodeType, EdgeType> {
 
@@ -65,7 +64,10 @@ public class Searcher<NodeType, EdgeType> {
     private ArrayList<Double> freqEdgeLabels;
     Map<GSpanEdge<NodeType, EdgeType>, DFSCode<NodeType, EdgeType>> initials;
     public PriorityQueue<FrequentSubgraph> kSubgraphs;
-    PriorityQueue<FrequentSubgraph> candidates;
+//    PriorityQueue<FrequentSubgraph> candidates;
+    MongoCollection<Document> subgraph;
+    ObjectId currentKey;
+    Map<ObjectId, DFSCode<NodeType, EdgeType>> candidates;
     int smallestOccurrences;
     private int type;
     public ArrayList<HPListGraph<NodeType, EdgeType>> result;
@@ -73,6 +75,7 @@ public class Searcher<NodeType, EdgeType> {
     private String path;
     private Extender<NodeType, EdgeType> extender;
     private Collection<HPListGraph<NodeType, EdgeType>> ret;
+    int graphNumber = 0;
 
     public Searcher(String path, int freqThreshold, int shortestDistance, int resultNumber) throws Exception {
         this.freqThreshold = new IntFrequency(freqThreshold);
@@ -88,8 +91,10 @@ public class Searcher<NodeType, EdgeType> {
         singleGraph.setShortestPaths_1hop();
     }
 
-    public void initialize() {
-        kSubgraphs = new PriorityQueue<FrequentSubgraph>();
+    public void initialize(MongoCollection<Document> sgraph) {
+        subgraph = sgraph;
+//        kSubgraphs = new PriorityQueue<FrequentSubgraph>();
+        candidates = new HashMap<ObjectId, DFSCode<NodeType, EdgeType>>();
 
         initials = new TreeMap<GSpanEdge<NodeType, EdgeType>, DFSCode<NodeType, EdgeType>>(
                 new gEdgeComparator<NodeType, EdgeType>());
@@ -147,60 +152,15 @@ public class Searcher<NodeType, EdgeType> {
 //        ArrayList<Thread> fEdgeThreads = new ArrayList<Thread>();
         for (final Iterator<Map.Entry<GSpanEdge<NodeType, EdgeType>, DFSCode<NodeType, EdgeType>>> eit = initials
                 .entrySet().iterator(); eit.hasNext();) {
-//            Thread t1;
-//            t1 = new Thread() {
-//                @Override
-//                public void run() {
-//                    synchronized (kSubgraphs) {
             final DFSCode<NodeType, EdgeType> code = eit.next().getValue();
-            if (freqThreshold.compareTo(code.frequency()) > 0) {
+            Frequency support = code.frequency();
+            if (freqThreshold.compareTo(support) > 0) {
                 eit.remove();
             } else {
-                FrequentSubgraph newSubGraph = new FrequentSubgraph(code);
-                addToKSubgraph(newSubGraph);
+                ObjectId id = addToDB(((IntFrequency) support).intValue());
+                candidates.put(id, code);
             }
         }
-//                }
-//            };
-//            t1.start();
-//            fEdgeThreads.add(t1);
-//        }
-//        for (int i = 0; i < fEdgeThreads.size(); i++) {
-//            try {
-//                fEdgeThreads.get(i).join();
-//            } catch (InterruptedException e) {
-//                System.out.println(e);
-//            }
-//        }
-        // get the top of kSubgraph
-        // kSubgraphs.poll();
-        FrequentSubgraph smallestSub = kSubgraphs.peek();
-        // PriorityQueue kSubgraphsCopy = new
-        // PriorityQueue<FrequentSubgraph>(kSubgraphs);
-
-        candidates = new PriorityQueue<FrequentSubgraph>(
-                (FrequentSubgraph a, FrequentSubgraph b) -> {
-                    int compare = a.dfsCode.frequency().compareTo(b.dfsCode.frequency());
-                    if (compare < 0) {
-                        return 1;
-                    }
-                    if (compare > 0) {
-                        return -1;
-                    }
-                    return 0;
-                });
-
-        // copy kSubgraph into candidates
-        // while (!kSubgraphsCopy.isEmpty()) {
-        // candidates.add((FrequentSubgraph) kSubgraphsCopy.poll());
-        // }
-        kSubgraphs.forEach((FrequentSubgraph eachEgde) -> {
-            candidates.add((FrequentSubgraph) eachEgde);
-        });
-
-        // get the top of candidates queue
-        // candidates.poll();
-        FrequentSubgraph largestCandidate = candidates.peek();
 
         neighborLabels = new Hashtable();
 
@@ -240,39 +200,17 @@ public class Searcher<NodeType, EdgeType> {
         extender = algo.getExtender(this.freqThreshold.intValue());
 
         // while Qc.size > 0
-        while (!candidates.isEmpty()) {
+        while (getCandidate()) {
             // get top of candidates
-            FrequentSubgraph topCandidate = candidates.poll();
-            //check support
-            boolean isSatifyMinSub = freqThreshold.compareTo(topCandidate.dfsCode.frequency()) <= 0;
-            // if greater than or equal minsub
-            if (isSatifyMinSub) {
-                // call search method to extend
-                search(topCandidate.dfsCode);
-                // remove frequent edge labels that are already processed - test test test
-                // before approval
-                // double edgeLabel =
-                // Double.parseDouble(topCandidate.dfsCode.getHPlistGraph().getEdgeLabel(topCandidate.dfsCode.getHPlistGraph().getEdge(0,
-                // 1)).toString());
-                // int node1Label =
-                // Integer.parseInt(topCandidate.dfsCode.getHPlistGraph().getNodeLabel(0).toString());
-                // int node2Label =
-                // Integer.parseInt(topCandidate.dfsCode.getHPlistGraph().getNodeLabel(1).toString());
-                // String signature;
-                // if (node1Label < node2Label) {
-                // signature = node1Label + "_" + edgeLabel + "_" + node2Label;
-                // } else {
-                // signature = node2Label + "_" + edgeLabel + "_" + node1Label;
-                // }
-                // StaticData.hashedEdges.remove(signature);
+            DFSCode<NodeType, EdgeType> node = candidates.get(currentKey);
 
-                // if (VERBOSE) {
-                // out.println("\tdone (" + (System.currentTimeMillis() - time)
-                // + " ms)");
-                // }
-            } else {
-                candidates.clear();
-            }
+//            FrequentSubgraph topCandidate = candidates.poll();
+            //check support
+//            boolean isSatifyMinSub = freqThreshold.compareTo(node.frequency()) <= 0;
+            // if greater than or equal minsub
+//            if (isSatifyMinSub)
+            // call search method to extend
+            search(node);
         }
         result = (ArrayList<HPListGraph<NodeType, EdgeType>>) ret;
     }
@@ -354,7 +292,7 @@ public class Searcher<NodeType, EdgeType> {
 
         // //     System.out.println("Getting Children");
         System.out.println("--------------------------------------------------------- ");
-        System.out.println("Danh sach con cua node: \n" + node);
+        System.out.println("Danh sach con cua node: " + node);
         Frequency NodeFreq = ((Frequented) node).frequency();
         System.out.println("--> Support: " + NodeFreq);
 
@@ -394,17 +332,13 @@ public class Searcher<NodeType, EdgeType> {
                 //check isCanical
                 final Canonizable can = (Canonizable) child;
                 if (can.isCanonical()) {
-                    FrequentSubgraph newChildSubgraph
-                            = new FrequentSubgraph((DFSCode<NodeType, EdgeType>) child);
-                    // add to Qk and update minsub
-                    addToKSubgraph(newChildSubgraph);
-                    // add to Qc
-                    candidates.add(newChildSubgraph);
-//                         System.out.println("success add child");
+//                    FrequentSubgraph newChildSubgraph
+//                            = new FrequentSubgraph((DFSCode<NodeType, EdgeType>) child);
+                    ObjectId id = addToDB(((IntFrequency) childFreq).intValue());
+                    candidates.put(id, (DFSCode<NodeType, EdgeType>) child);
                 }
             }
 
-            System.out.println(" --> New Final minsub: " + freqThreshold + "\n");
         }
 //                }
 //            };
@@ -418,7 +352,7 @@ public class Searcher<NodeType, EdgeType> {
 //                System.out.println(e);
 //            }
 //        }
-
+        sequenlizeToPrint((DFSCode<NodeType, EdgeType>) node);
         node.store(ret);
         node.finalizeIt();
 // if (VVERBOSE) {
@@ -439,4 +373,54 @@ public class Searcher<NodeType, EdgeType> {
     public int getMinsub() {
         return freqThreshold.intValue();
     }
+
+    void checkAndUpdateMinSub() {
+        Document kGraph = subgraph.find()
+                .sort(descending("support"))
+                .skip(resultNumber - 1)
+                .first();
+        if (kGraph != null) {
+            System.out.println(" --> New Final minsub: " + kGraph.get("support"));
+            Frequency newMinsub = new IntFrequency((int) kGraph.get("support"));
+            if (freqThreshold.compareTo(newMinsub) < 0) {
+                freqThreshold.update(newMinsub);
+                subgraph.deleteMany(lt("support", freqThreshold.intValue()));
+            }
+        }
+
+    }
+
+    boolean getCandidate() {
+        Document graph = subgraph.find(and(eq("isExtender", false),
+                gte("support", freqThreshold.intValue())))
+                .sort(descending("support"))
+                .first();
+        if (graph != null) {
+            currentKey = (ObjectId) graph.get("_id");
+            return true;
+        }
+        return false;
+    }
+
+    ObjectId addToDB(int support) {
+        ObjectId id = new ObjectId();
+        Document newGraph = new Document("_id", id)
+                .append("support", support)
+                .append("isExtender", false)
+                .append("serialize", "");
+        subgraph.insertOne(newGraph);
+        graphNumber++;
+        if (graphNumber >= resultNumber && freqThreshold.intValue() - support < 0) {
+            checkAndUpdateMinSub();
+        }
+        return id;
+    }
+
+    void sequenlizeToPrint(DFSCode<NodeType, EdgeType> node) {
+        String serialize = DFScodeSerializer.serialize(node.me);
+        subgraph.findOneAndUpdate(eq("_id", currentKey),
+                Updates.combine(Updates.set("isExtender", true), Updates.set("serialize", serialize)));
+        candidates.remove(currentKey);
+    }
+
 }
