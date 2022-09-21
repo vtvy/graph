@@ -51,17 +51,17 @@ public class main {
 
         // default frequency
         int freq = 1;
-        int minK = 10;
-        int maxK = 50;
-
 
         //Creating a MongoDB client
         MongoClient client = MongoClients.create("mongodb+srv://test:test@graph.eywuuaq.mongodb.net/test");
         //Connecting to the database
         MongoDatabase db = client.getDatabase("grami");
+        db.getCollection("subgraph").drop();
         MongoCollection subgraph = db.getCollection("subgraph");
 //        String[] filenames = {"fb.lg", "citeseer.lg", "mico.lg", "p2p.lg","mydata9v9e1.lg"};
-        String[] filenames = {"mydata9v9e1.lg"};
+        String[] filenames = {"S_CC.lg"};
+        int minK = 300;
+        int maxK = 300;
         for (String filename : filenames) {
             for (int k = minK; k <= maxK; k = k + 10) {
 
@@ -147,7 +147,6 @@ public class main {
                 } catch (Exception e) {
                     System.out.println(e);
                 }
-                db.getCollection("subgraph").drop();
 
             }
 

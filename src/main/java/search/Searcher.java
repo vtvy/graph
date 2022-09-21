@@ -30,8 +30,6 @@ import java.util.Vector;
 
 import utilities.MyPair;
 import com.mongodb.client.MongoCollection;
-import com.mongodb.client.MongoDatabase;
-import com.mongodb.client.result.InsertOneResult;
 import static com.mongodb.client.model.Filters.*;
 import static com.mongodb.client.model.Sorts.descending;
 import com.mongodb.client.model.Updates;
@@ -48,10 +46,8 @@ import dataStructures.HPListGraph;
 import dataStructures.IntFrequency;
 import dataStructures.gEdgeComparator;
 import dataStructures.myNode;
-import java.util.Arrays;
 import java.util.Collection;
 import org.bson.Document;
-import org.bson.conversions.Bson;
 import org.bson.types.ObjectId;
 
 public class Searcher<NodeType, EdgeType> {
@@ -195,8 +191,7 @@ public class Searcher<NodeType, EdgeType> {
         Algorithm<NodeType, EdgeType> algo = new Algorithm<NodeType, EdgeType>();
         algo.setInitials(initials);
 
-        ret = new ArrayList<HPListGraph<NodeType, EdgeType>>();
-
+//        ret = new ArrayList<HPListGraph<NodeType, EdgeType>>();
         extender = algo.getExtender(this.freqThreshold.intValue());
 
         // while Qc.size > 0
@@ -212,81 +207,79 @@ public class Searcher<NodeType, EdgeType> {
             // call search method to extend
             search(node);
         }
-        result = (ArrayList<HPListGraph<NodeType, EdgeType>>) ret;
+//        result = (ArrayList<HPListGraph<NodeType, EdgeType>>) ret;
     }
 
-    private int getNumOfDistinctLabels(HPListGraph<NodeType, EdgeType> list) {
-        HashSet<Integer> difflabels = new HashSet<Integer>();
-        for (int i = 0; i < list.getNodeCount(); i++) {
-            int label = (Integer) list.getNodeLabel(i);
-            if (!difflabels.contains(label)) {
-                difflabels.add(label);
-            }
-        }
-
-        return difflabels.size();
-
-    }
-
+//    private int getNumOfDistinctLabels(HPListGraph<NodeType, EdgeType> list) {
+//        HashSet<Integer> difflabels = new HashSet<Integer>();
+//        for (int i = 0; i < list.getNodeCount(); i++) {
+//            int label = (Integer) list.getNodeLabel(i);
+//            if (!difflabels.contains(label)) {
+//                difflabels.add(label);
+//            }
+//        }
+//
+//        return difflabels.size();
+//
+//    }
     public Graph getSingleGraph() {
         return singleGraph;
     }
 
-    protected void addToKSubgraph(FrequentSubgraph newSubgraph) {
-
-        int isLowest = newSubgraph.dfsCode.frequency().compareTo(freqThreshold);
-        kSubgraphs.add(newSubgraph);
-
-        // in kSubgraphs
-        System.out.println("----------------------- Sau khi them subgraph co support: " + newSubgraph.dfsCode.frequency());
-        System.out.println("----------------------- Hang doi luc nay la: ");
-        System.out.println(Arrays.deepToString(kSubgraphs.toArray()));
-        kSubgraphs.forEach(action -> {
-            System.out.println("- Graph co support: " + action.dfsCode.me.getFreq());
-            String out = DFScodeSerializer.serialize(action.dfsCode.me);
-            System.out.println(out + "\n");
-        });
-        // if kSubgraphs is full
-        if (kSubgraphs.size() > resultNumber && isLowest != 0) {
-
-            // if current kSub size subtract occurrences of smallest element equal to 4
-            // remove unused element and update minsub (freqThreshold)
-            while (kSubgraphs.size() > resultNumber) {
-                smallestOccurrences = 0;
-                // count occurences of smallest kSubgraphs
-                kSubgraphs.forEach((FrequentSubgraph eachSubgraph) -> {
-                    Frequency eachFreq = eachSubgraph.dfsCode.frequency();
-                    int isEqualTheshHold = freqThreshold.compareTo(eachFreq);
-                    if (isEqualTheshHold == 0) {
-                        smallestOccurrences++;
-                    }
-                });
-
-                if (kSubgraphs.size() - smallestOccurrences >= resultNumber) {
-                    for (int i = 0; i < smallestOccurrences; i++) {
-                        //     System.out.println("before remove :" + kSubgraphs.size());
-                        kSubgraphs.remove();
-                        //     System.out.println("after remove :" + kSubgraphs.size());
-                    }
-                } else {
-                    break;
-                }
-            }
-
-        }
-
-        if (kSubgraphs.size() >= resultNumber) {
-            Frequency newFreq = kSubgraphs.peek().dfsCode.frequency();
-            // update minsub
-            if (freqThreshold.compareTo(newFreq) < 0) {
-                //     System.out.print("before update freq: " + freqThreshold);
-                freqThreshold.update(newFreq);
-                //     //     System.out.print("after update freq: " + freqThreshold);
-            }
-
-        }
-    }
-
+//    protected void addToKSubgraph(FrequentSubgraph newSubgraph) {
+//
+//        int isLowest = newSubgraph.dfsCode.frequency().compareTo(freqThreshold);
+//        kSubgraphs.add(newSubgraph);
+//
+//        // in kSubgraphs
+//        System.out.println("----------------------- Sau khi them subgraph co support: " + newSubgraph.dfsCode.frequency());
+//        System.out.println("----------------------- Hang doi luc nay la: ");
+//        System.out.println(Arrays.deepToString(kSubgraphs.toArray()));
+//        kSubgraphs.forEach(action -> {
+//            System.out.println("- Graph co support: " + action.dfsCode.me.getFreq());
+//            String out = DFScodeSerializer.serialize(action.dfsCode.me);
+//            System.out.println(out + "\n");
+//        });
+//        // if kSubgraphs is full
+//        if (kSubgraphs.size() > resultNumber && isLowest != 0) {
+//
+//            // if current kSub size subtract occurrences of smallest element equal to 4
+//            // remove unused element and update minsub (freqThreshold)
+//            while (kSubgraphs.size() > resultNumber) {
+//                smallestOccurrences = 0;
+//                // count occurences of smallest kSubgraphs
+//                kSubgraphs.forEach((FrequentSubgraph eachSubgraph) -> {
+//                    Frequency eachFreq = eachSubgraph.dfsCode.frequency();
+//                    int isEqualTheshHold = freqThreshold.compareTo(eachFreq);
+//                    if (isEqualTheshHold == 0) {
+//                        smallestOccurrences++;
+//                    }
+//                });
+//
+//                if (kSubgraphs.size() - smallestOccurrences >= resultNumber) {
+//                    for (int i = 0; i < smallestOccurrences; i++) {
+//                        //     System.out.println("before remove :" + kSubgraphs.size());
+//                        kSubgraphs.remove();
+//                        //     System.out.println("after remove :" + kSubgraphs.size());
+//                    }
+//                } else {
+//                    break;
+//                }
+//            }
+//
+//        }
+//
+//        if (kSubgraphs.size() >= resultNumber) {
+//            Frequency newFreq = kSubgraphs.peek().dfsCode.frequency();
+//            // update minsub
+//            if (freqThreshold.compareTo(newFreq) < 0) {
+//                //     System.out.print("before update freq: " + freqThreshold);
+//                freqThreshold.update(newFreq);
+//                //     //     System.out.print("after update freq: " + freqThreshold);
+//            }
+//
+//        }
+//    }
     @SuppressWarnings("unchecked")
     private void search(final SearchLatticeNode<NodeType, EdgeType> node) { // RECURSIVE NODES SEARCH
 
@@ -353,8 +346,8 @@ public class Searcher<NodeType, EdgeType> {
 //            }
 //        }
         sequenlizeToPrint((DFSCode<NodeType, EdgeType>) node);
-        node.store(ret);
-        node.finalizeIt();
+//        node.store(ret);
+//        node.finalizeIt();
 // if (VVERBOSE) {
         // out.println("node " + node + " done. Store: " + node.store()
         // + " children " + tmp.size() + " freq "
@@ -380,10 +373,10 @@ public class Searcher<NodeType, EdgeType> {
                 .skip(resultNumber - 1)
                 .first();
         if (kGraph != null) {
-            System.out.println(" --> New Final minsub: " + kGraph.get("support"));
             Frequency newMinsub = new IntFrequency((int) kGraph.get("support"));
             if (freqThreshold.compareTo(newMinsub) < 0) {
                 freqThreshold.update(newMinsub);
+                System.out.println(" --> New Final minsub: " + kGraph.get("support"));
                 subgraph.deleteMany(lt("support", freqThreshold.intValue()));
             }
         }
